@@ -1,5 +1,7 @@
-Please see https://airflow.apache.org/docs/apache-airflow/2.4.3/plugins.html for information about creating Airflow plugin
+# MWAA Plugins
 
-Note that, per the above documentation, importing operators, sensors, hooks added in plugins via airflow.{operators,sensors,hooks}.<plugin_name> is no longer supported, and these extensions should just be imported as regular python modules. 
+This directory will be zipped and synced to MWAA on deployment. 
 
+It's expecting a python module structure (see [AWS docs](https://docs.aws.amazon.com/mwaa/latest/userguide/configuring-dag-import-plugins.html#configuring-dag-plugins-test-create#configuring-dag-plugins-overview-complex)).
 
+Also, see the AWS instructions on [creating plugins](https://docs.aws.amazon.com/mwaa/latest/userguide/configuring-dag-import-plugins.html#configuring-dag-plugins-test-create).

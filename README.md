@@ -1,4 +1,6 @@
-# About aws-mwaa-local-runner
+# The Block aws-mwaa-local-runner Patch
+
+A Block version of the [MWAA local dev project](https://github.com/aws/aws-mwaa-local-runner).
 
 This repository provides a command line interface (CLI) utility that replicates an Amazon Managed Workflows for Apache Airflow (MWAA) environment locally.
 

@@ -21,6 +21,7 @@ services:
         environment:
             - LOAD_EX=n
             - EXECUTOR=Local
+            - AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT=120
         logging:
             options:
                 max-size: 10m

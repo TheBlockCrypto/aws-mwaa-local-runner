@@ -1,0 +1,22 @@
+# VERSION 1.10
+# AUTHOR: Subash Canapathy
+# DESCRIPTION: Amazon MWAA Local Dev Environment
+# BUILD: docker build --rm -t amazon/mwaa-local .
+
+FROM amazon/mwaa-local:2_4
+
+# Airflow
+ARG AIRFLOW_USER_HOME=/usr/local/airflow
+
+# Load DAGs/Plugins
+USER root
+ADD dags ${AIRFLOW_USER_HOME}/dags
+ADD plugins ${AIRFLOW_USER_HOME}/plugins
+ADD requirements ${AIRFLOW_USER_HOME}/requirements
+ADD startup_script ${AIRFLOW_USER_HOME}/startup
+RUN chown -R airflow: ${AIRFLOW_USER_HOME}/dags && chmod -R +x ${AIRFLOW_USER_HOME}/dags
+RUN chown -R airflow: ${AIRFLOW_USER_HOME}/plugins && chmod -R +x ${AIRFLOW_USER_HOME}/plugins
+RUN chown -R airflow: ${AIRFLOW_USER_HOME}/requirements && chmod -R +x ${AIRFLOW_USER_HOME}/requirements
+RUN chown -R airflow: ${AIRFLOW_USER_HOME}/startup && chmod -R +x ${AIRFLOW_USER_HOME}/startup
+
+USER airflow

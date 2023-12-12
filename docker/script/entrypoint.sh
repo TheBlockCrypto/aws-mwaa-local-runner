@@ -19,6 +19,27 @@ export \
   AIRFLOW__CORE__FERNET_KEY \
   AIRFLOW__CORE__LOAD_EXAMPLES \
 
+define_connect_string() {
+    # Check if the user has provided explicit Airflow configuration concerning the database
+    if [ -z "$AIRFLOW__CORE__SQL_ALCHEMY_CONN" ]; then
+      # Default values corresponding to the default compose files
+      : "${POSTGRES_HOST:="postgres"}"
+      : "${POSTGRES_PORT:="5432"}"
+      : "${POSTGRES_USER:="airflow"}"
+      : "${POSTGRES_PASSWORD:="airflow"}"
+      : "${POSTGRES_DB:="airflow"}"
+      : "${POSTGRES_EXTRAS:-""}"
+
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN="postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}${POSTGRES_EXTRAS}"
+      export AIRFLOW__CORE__SQL_ALCHEMY_CONN
+    else
+      # Derive useful variables from the AIRFLOW__ variables provided explicitly by the user
+      POSTGRES_ENDPOINT=$(echo -n "$AIRFLOW__CORE__SQL_ALCHEMY_CONN" | cut -d '/' -f3 | sed -e 's,.*@,,')
+      POSTGRES_HOST=$(echo -n "$POSTGRES_ENDPOINT" | cut -d ':' -f1)
+      POSTGRES_PORT=$(echo -n "$POSTGRES_ENDPOINT" | cut -d ':' -f2)
+    fi
+}
+
 # Install custom python package if requirements.txt is present
 install_requirements() {
     # Install custom python package if requirements.txt is present
@@ -29,10 +50,18 @@ install_requirements() {
           then
               echo "WARNING: Constraints should be specified for requirements.txt. Please see https://docs.aws.amazon.com/mwaa/latest/userguide/working-dags-dependencies.html#working-dags-dependencies-test-create"
           fi
-      fi    
+      fi
         echo "Installing requirements.txt"
         pip3 install --user -r "$AIRFLOW_HOME/$REQUIREMENTS_FILE"
     fi
+}
+
+run_pytests() {
+    PYTEST_DIR="$AIRFLOW_HOME/dags/tests"
+    TEST_DIRS=$(cd "$PYTEST_DIR" && find ./* -maxdepth 0 -type d)
+    define_connect_string
+    pip3 install -r "$AIRFLOW_HOME/$REQUIREMENTS_FILE"
+    cd "$PYTEST_DIR" && python3 -m pytest "$TEST_DIRS"
 }
 
 # Download custom python WHL files and package as ZIP if requirements.txt is present
@@ -77,25 +106,7 @@ execute_startup_script() {
 
 # Other executors than SequentialExecutor drive the need for an SQL database, here PostgreSQL is used
 if [ "$AIRFLOW__CORE__EXECUTOR" != "SequentialExecutor" ]; then
-  # Check if the user has provided explicit Airflow configuration concerning the database
-  if [ -z "$AIRFLOW__CORE__SQL_ALCHEMY_CONN" ]; then
-    # Default values corresponding to the default compose files
-    : "${POSTGRES_HOST:="postgres"}"
-    : "${POSTGRES_PORT:="5432"}"
-    : "${POSTGRES_USER:="airflow"}"
-    : "${POSTGRES_PASSWORD:="airflow"}"
-    : "${POSTGRES_DB:="airflow"}"
-    : "${POSTGRES_EXTRAS:-""}"
-
-    AIRFLOW__CORE__SQL_ALCHEMY_CONN="postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}${POSTGRES_EXTRAS}"
-    export AIRFLOW__CORE__SQL_ALCHEMY_CONN
-  else
-    # Derive useful variables from the AIRFLOW__ variables provided explicitly by the user
-    POSTGRES_ENDPOINT=$(echo -n "$AIRFLOW__CORE__SQL_ALCHEMY_CONN" | cut -d '/' -f3 | sed -e 's,.*@,,')
-    POSTGRES_HOST=$(echo -n "$POSTGRES_ENDPOINT" | cut -d ':' -f1)
-    POSTGRES_PORT=$(echo -n "$POSTGRES_ENDPOINT" | cut -d ':' -f2)
-  fi
-
+  define_connect_string
   wait_for_port "Postgres" "$POSTGRES_HOST" "$POSTGRES_PORT"
 fi
 
@@ -107,16 +118,16 @@ case "$1" in
       mkdir -p $AIRFLOW_HOME/plugins
       cd $AIRFLOW_HOME/plugins
       aws s3 cp $S3_PLUGINS_PATH plugins.zip
-      unzip -o plugins.zip 
+      unzip -o plugins.zip
       rm plugins.zip
     fi
     # if S3_DAGS_PATH
     if [ -n "$S3_DAGS_PATH" ]; then
-      echo "Syncing $S3_DAGS_PATH"   
+      echo "Syncing $S3_DAGS_PATH"
       mkdir -p $AIRFLOW_HOME/dags
       cd $AIRFLOW_HOME/dags
       aws s3 sync --exact-timestamp --delete $S3_DAGS_PATH .
-    fi    
+    fi
     # if S3_REQUIREMENTS_PATH
     if [ -n "$S3_REQUIREMENTS_PATH" ]; then
       echo "Downloading $S3_REQUIREMENTS_PATH"
@@ -131,6 +142,7 @@ case "$1" in
 
     install_requirements
     airflow db init
+    [[ -f "$AIRFLOW_HOME/dags/.variables.json" ]] && airflow variables import "$AIRFLOW_HOME/dags/.variables.json"
     if [ "$AIRFLOW__CORE__EXECUTOR" = "LocalExecutor" ] || [ "$AIRFLOW__CORE__EXECUTOR" = "SequentialExecutor" ]; then
       # With the "Local" and "Sequential" executors it should all run in one container.
       airflow scheduler &
@@ -143,6 +155,10 @@ case "$1" in
     airflow db reset -y
     sleep 2
     airflow db init
+    [[ -f "$AIRFLOW_HOME/dags/.variables.json" ]] && airflow variables import "$AIRFLOW_HOME/dags/.variables.json"
+    ;;
+  run-pytest)
+    run_pytests
     ;;
   test-requirements)
     # if S3_REQUIREMENTS_PATH
@@ -150,7 +166,7 @@ case "$1" in
       echo "Downloading $S3_REQUIREMENTS_PATH"
       mkdir -p $AIRFLOW_HOME/requirements
       aws s3 cp $S3_REQUIREMENTS_PATH $AIRFLOW_HOME/$REQUIREMENTS_FILE
-    fi      
+    fi
     install_requirements
     ;;
   package-requirements)
@@ -159,7 +175,7 @@ case "$1" in
       echo "Downloading $S3_REQUIREMENTS_PATH"
       mkdir -p $AIRFLOW_HOME/requirements
       aws s3 cp $S3_REQUIREMENTS_PATH $AIRFLOW_HOME/$REQUIREMENTS_FILE
-    fi      
+    fi
     package_requirements
     ;;
   test-startup-script)

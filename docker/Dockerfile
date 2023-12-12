@@ -45,6 +45,8 @@ COPY config/webserver_config.py ${AIRFLOW_USER_HOME}/webserver_config.py
 
 RUN chown -R airflow: ${AIRFLOW_USER_HOME}
 RUN chmod +x /entrypoint.sh
+RUN echo 'export FERNET_KEY="$(cat /usr/local/etc/airflow_fernet_key)"' >> /usr/local/airflow/.bashrc
+RUN chown -R airflow: /usr/local/airflow/.bashrc
 
 EXPOSE 8080 5555 8793
 
